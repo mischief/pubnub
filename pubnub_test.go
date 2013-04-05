@@ -99,3 +99,24 @@ loop:
 		}
 	}
 }
+
+func BenchmarkPubNub(b *testing.B) {
+	channel := "my_channel"
+	message := "Hello, World"
+
+	b.StopTimer()
+
+	pubnub := NewPubNub("demo", "demo", "", "", false)
+
+	time.Sleep(100 * time.Millisecond)
+
+	b.StartTimer()
+
+	for i := 0; i < b.N; i++ {
+		_, err := pubnub.Publish(channel, message)
+		if err != nil {
+			b.Error(err)
+		}
+	}
+
+}
