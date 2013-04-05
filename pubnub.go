@@ -50,17 +50,11 @@ var pubnubClientHeaders = map[string]string{
 	"Accept":     "*/*",
 }
 
-// Value recieved by the callback passed to PubNub.Time
-type PubNubTime float64
-
-// Type of callback to be passed to PubNub.Subscribe
-type PubNubCallback func(message []interface{}) bool
-
 // Public interface for PubNub
 type PubNubInterface interface {
-	Time(callback PubNubCallback) error
-	Publish(channel string, message []interface{}) (interface{}, error)
-	Subscribe(channel string, callback PubNubCallback) error
+	Time() (string, error)
+	Publish(channel string, message interface{}) (string, error)
+	Subscribe(channel string) (chan interface{}, error)
 }
 
 // Concrete implementation of PubNubInterface
@@ -130,28 +124,31 @@ func (pn *PubNub) request(urlbits []string, origin string, encode bool, urlparam
 }
 
 // PubNub.Time
-func (pn *PubNub) Time(callback PubNubCallback) error {
+func (pn *PubNub) Time() (string, error) {
 
-	go func() {
-		resp, err := pn.request([]string{"time", "0"}, pn.origin_url, false, nil)
+	resp, err := pn.request([]string{"time", "0"}, pn.origin_url, false, nil)
 
-		if err != nil {
-			panic(err)
-		}
+	if err != nil {
+		return "", err
+	}
 
-		callback(resp)
-	}()
+	time, ok := resp[0].(float64)
 
-	return nil
+	if !ok {
+		return "", errors.New("PubNub time response is not a float64")
+	}
+
+	return fmt.Sprintf("%.0f", time), nil
 }
 
 // PubNub.Publish
-func (pn *PubNub) Publish(channel string, message []interface{}) (interface{}, error) {
+// Returns timestamp, nil on success or "", error on failure.
+func (pn *PubNub) Publish(channel string, message interface{}) (string, error) {
 
 	json, err := json.Marshal(message)
 
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
 	args := []string{"publish", pn.publish_key, pn.subscribe_key, "0", channel, "0", string(json)}
@@ -162,46 +159,55 @@ func (pn *PubNub) Publish(channel string, message []interface{}) (interface{}, e
 	resp, err := pn.request(args, pn.origin_url, false, query)
 
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
-	return resp, nil
+	// check for api error
+	if resp[0].(float64) != 1 {
+		return "", errors.New(resp[1].(string))
+	}
+
+	timestamp := resp[2].(string)
+
+	return timestamp, nil
 }
 
 // PubNub.Subscribe
-func (pn *PubNub) Subscribe(channel string, callback PubNubCallback) error {
+func (pn *PubNub) Subscribe(channel string) (chan interface{}, error) {
+
+	out := make(chan interface{}, 1)
 
 	// begin subscription
-	for {
-		args := []string{"subscribe", pn.subscribe_key, channel, "0", pn.time_token}
+	go func() {
+		for {
+			args := []string{"subscribe", pn.subscribe_key, channel, "0", pn.time_token}
 
-		//  go func() {
-		query := url.Values{}
-		query.Add("uuid", pn.session_uuid.String())
+			//  go func() {
+			query := url.Values{}
+			query.Add("uuid", pn.session_uuid.String())
 
-		resp, err := pn.request(args, pn.origin_url, true, query)
+			resp, err := pn.request(args, pn.origin_url, true, query)
 
-		if err != nil {
-			return err
-		}
-		messages := resp[0].([]interface{})
-
-		pn.time_token = resp[1].(string)
-
-		if len(messages) == 0 {
-			// timeout
-			continue
-		}
-
-		for _, msg := range messages {
-			if !callback(msg.([]interface{})) {
-				return nil
+			if err != nil {
+				close(out)
 			}
+			messages := resp[0].([]interface{})
+
+			pn.time_token = resp[1].(string)
+
+			if len(messages) == 0 {
+				// timeout
+				continue
+			}
+
+			for _, msg := range messages {
+				out <- msg
+			}
+
 		}
+	}()
 
-	}
-
-	return nil
+	return out, nil
 }
 
 // Constructor for a new PubNub client.

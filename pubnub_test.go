@@ -20,28 +20,26 @@ func TestPubNubTime(t *testing.T) {
 
 	done := make(chan bool)
 
-	pubnub.Time(func(msg []interface{}) bool {
-		time, ok := msg[0].(float64)
+	go func() {
+		time, err := pubnub.Time()
 
-		if !ok {
-			t.Errorf("time response is not a float64")
+		if err != nil {
+			t.Errorf("pubnub.Time: %s", err)
 		}
 
-		if time != 0 {
-			t.Logf("time response: %f", time)
+		if time == "" || time == "0" {
+			t.Errorf("pubnub.Time returned zero value %q", time)
 		} else {
-			t.Errorf("Invalid time response")
+			t.Logf("pubnub.Time success: %s", time)
 		}
 
 		done <- true
-
-		return false
-	})
+	}()
 
 	select {
 	case <-done:
 	case <-time.After(1 * time.Second):
-		t.Errorf("No response from time call")
+		t.Errorf("No response from pubnub.Time call")
 	}
 }
 
@@ -52,25 +50,12 @@ func TestPubNub(t *testing.T) {
 
 	pubnub := NewPubNub("demo", "demo", "", "", false)
 
-	done := make(chan bool, nmsgs)
+	// get a go channel of json objects from a pubnub channel
+	subchan, err := pubnub.Subscribe(channel)
 
-	// subscribe to a PubNub channel in another goroutine, .Subscribe blocks
-	go func() {
-
-		// called when we get a message
-		cb := func(msg []interface{}) bool {
-			t.Logf("Subscriber got a message: %#v", msg)
-			done <- true
-
-			// return true to be called again, or false to stop the subscription
-			return true
-		}
-
-		err := pubnub.Subscribe(channel, cb)
-		if err != nil {
-			t.Errorf("Subscribe error: %s", err)
-		}
-	}()
+	if err != nil {
+		t.Errorf("Subscribe error: %s", err)
+	}
 
 	// wait a moment..
 	time.Sleep(100 * time.Millisecond)
@@ -78,7 +63,7 @@ func TestPubNub(t *testing.T) {
 	// publish some messages
 	for i := 0; i < nmsgs; i++ {
 		t.Logf("Publishing %q", message)
-		resp, err := pubnub.Publish(channel, []interface{}{message})
+		resp, err := pubnub.Publish(channel, message)
 
 		if err != nil {
 			t.Errorf("Publish error: %s", err)
@@ -92,7 +77,13 @@ loop:
 
 		select {
 		// a message completed
-		case <-done:
+		case msg, ok := <-subchan:
+			if !ok {
+				t.Errorf("Subscriber channel closed")
+			}
+
+			t.Logf("Subscriber got message: %q", msg)
+
 			nmsgs--
 
 			if nmsgs == 0 {
