@@ -51,7 +51,7 @@ func TestPubNub(t *testing.T) {
 	pubnub := NewPubNub("demo", "demo", "", "", false)
 
 	// get a go channel of json objects from a pubnub channel
-	subchan, err := pubnub.Subscribe(channel)
+	subchan, err := pubnub.Subscribe(channel, nil)
 
 	if err != nil {
 		t.Errorf("Subscribe error: %s", err)

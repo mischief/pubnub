@@ -54,7 +54,7 @@ var pubnubClientHeaders = map[string]string{
 type PubNubInterface interface {
 	Time() (string, error)
 	Publish(channel string, message interface{}) (string, error)
-	Subscribe(channel string) (<-chan interface{}, error)
+	Subscribe(channel string, stopChan <-chan struct{}) (<-chan interface{}, error)
 }
 
 // Concrete implementation of PubNubInterface
@@ -173,13 +173,20 @@ func (pn *PubNub) Publish(channel string, message interface{}) (string, error) {
 }
 
 // PubNub.Subscribe
-func (pn *PubNub) Subscribe(channel string) (<-chan interface{}, error) {
+func (pn *PubNub) Subscribe(channel string, stopChan <-chan struct{}) (<-chan interface{}, error) {
 
 	out := make(chan interface{}, 1)
 
 	// begin subscription
 	go func() {
 		for {
+			select {
+			case <-stopChan:
+				close(out)
+				return
+			default:
+			}
+
 			args := []string{"subscribe", pn.subscribe_key, channel, "0", pn.time_token}
 
 			//  go func() {
@@ -201,7 +208,12 @@ func (pn *PubNub) Subscribe(channel string) (<-chan interface{}, error) {
 			}
 
 			for _, msg := range messages {
-				out <- msg
+				select {
+				case out <- msg:
+				case <-stopChan:
+					close(out)
+					return
+				}
 			}
 
 		}
