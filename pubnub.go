@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"strings"
@@ -108,15 +107,11 @@ func (pn *PubNub) request(urlbits []string, origin string, encode bool, urlparam
 		return nil, err
 	}
 
-	body, err := ioutil.ReadAll(response.Body)
-
-	if err != nil {
-		return nil, err
-	}
+	decoder := json.NewDecoder(response.Body)
+	defer response.Body.Close()
 
 	var out []interface{}
-
-	if err := json.Unmarshal(body, &out); err != nil {
+	if err := decoder.Decode(&out); err != nil {
 		return nil, err
 	}
 
