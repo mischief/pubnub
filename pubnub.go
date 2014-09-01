@@ -132,6 +132,10 @@ func (pn *PubNub) Time() (string, error) {
 		return "", err
 	}
 
+	if len(resp) < 1 {
+		return "", fmt.Errorf("Unexpected response: %s", resp)
+	}
+
 	time, ok := resp[0].(float64)
 
 	if !ok {
@@ -160,6 +164,10 @@ func (pn *PubNub) Publish(channel string, message interface{}) (string, error) {
 
 	if err != nil {
 		return "", err
+	}
+
+	if len(resp) < 3 {
+		return "", fmt.Errorf("Unexpected response:", resp)
 	}
 
 	// check for api error
@@ -198,6 +206,12 @@ func (pn *PubNub) Subscribe(channel string, stopChan <-chan struct{}) (<-chan in
 			if err != nil {
 				close(out)
 			}
+
+			if len(resp) < 2 {
+				// timeout
+				continue
+			}
+
 			messages := resp[0].([]interface{})
 
 			pn.time_token = resp[1].(string)
