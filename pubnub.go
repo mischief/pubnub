@@ -200,6 +200,7 @@ func (pn *PubNub) Subscribe(channel string, stopChan <-chan struct{}) (<-chan in
 
 			if err != nil {
 				close(out)
+				return
 			}
 
 			if len(resp) < 2 {
