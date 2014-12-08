@@ -3,6 +3,8 @@ pubnub
 
 Go Bindings for the PubNub 3.3 REST API
 
+*DISCLAIMER*: i wrote this for a job interview at pubnub which didn't work out anyway, i don't actually use or maintain it. if you want to see improvements here i am more that happy to merge working code into this repo..
+
 Usage
 =====
 
